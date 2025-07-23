@@ -1,492 +1,715 @@
-local player = game.Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local humanoid = character:WaitForChild("Humanoid")
+--[[
+	WARNING: Heads up! This script has not been verified by ScriptBlox. Use at your own risk!
+]]
 
-local speedMultiplier = 1
-local enabled = true
-local maxSpeedMultiplier = 10
-local warningShown = false
-local warningActive = false
-local speedMethod = "CFrame"
 
-local methods = {
-    CFrame = {
-        name = "Sleepwalking (undetected)",
-        warning = false,
-        apply = function()
-            local moveDirection = humanoid.MoveDirection
-            if moveDirection.Magnitude > 0 then
-                local rootPart = character.HumanoidRootPart
-                rootPart.CFrame = rootPart.CFrame + moveDirection * (humanoid.WalkSpeed * (speedMultiplier - 1) * 0.15)
-            end
-        end
-    },
-    Velocity = {
-        name = "HumanoidFucker (detected)",
-        warning = true,
-        apply = function()
-            local moveDirection = humanoid.MoveDirection
-            if moveDirection.Magnitude > 0 then
-                character.HumanoidRootPart.Velocity = character.HumanoidRootPart.Velocity + moveDirection * (humanoid.WalkSpeed * (speedMultiplier - 1) * 2)
-            end
-        end
-    }
-}
-
-local tweenService = game:GetService("TweenService")
-local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-local hoverInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-
-local function lockMovement(lock)
-    if lock then
-        humanoid:SetAttribute("OriginalWalkSpeed", humanoid.WalkSpeed)
-        humanoid.WalkSpeed = 0
-    else
-        local originalSpeed = humanoid:GetAttribute("OriginalWalkSpeed")
-        if originalSpeed then
-            humanoid.WalkSpeed = originalSpeed
-        end
-    end
+local Player = game:GetService("Players").LocalPlayer;
+local UIS = game:GetService("UserInputService");
+local TweenService = game:GetService("TweenService");
+local supportedGames = {[107476030760322]="Cart-Ride-into-Spiderman",[9458832163]="Cart-Ride-into-El-gato",[12841354936]="Escape-Digital-Circus-Cart-Ride"};
+local currentGameId = game.PlaceId;
+local isSupportedGame = supportedGames[currentGameId] ~= nil;
+local replicatedStorage = game:GetService("ReplicatedStorage");
+local hasSkipEndEvent = replicatedStorage:FindFirstChild("Events") and replicatedStorage.Events:FindFirstChild("SkipEndEvent");
+local hasKillEvent = replicatedStorage:FindFirstChild("Events") and replicatedStorage.Events:FindFirstChild("KillEvent");
+local function CreateMessageBox(title, message, options)
+	local ScreenGui = Instance.new("ScreenGui");
+	ScreenGui.Name = "MessageBoxGUI";
+	ScreenGui.Parent = game:GetService("CoreGui");
+	local MainFrame = Instance.new("Frame");
+	MainFrame.Name = "MainFrame";
+	MainFrame.Size = UDim2.new(0, 300, 0, 200);
+	MainFrame.Position = UDim2.new(0.5, -150, 0.5, -100);
+	MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30);
+	MainFrame.BorderSizePixel = 0;
+	MainFrame.Active = true;
+	MainFrame.Draggable = true;
+	MainFrame.Parent = ScreenGui;
+	local Title = Instance.new("TextLabel");
+	Title.Name = "Title";
+	Title.Size = UDim2.new(1, 0, 0, 30);
+	Title.Position = UDim2.new(0, 0, 0, 0);
+	Title.BackgroundColor3 = Color3.fromRGB(20, 20, 20);
+	Title.TextColor3 = Color3.fromRGB(255, 255, 255);
+	Title.Text = title;
+	Title.Font = Enum.Font.GothamBold;
+	Title.TextSize = 14;
+	Title.Parent = MainFrame;
+	local Message = Instance.new("TextLabel");
+	Message.Name = "Message";
+	Message.Size = UDim2.new(1, -20, 1, -80);
+	Message.Position = UDim2.new(0, 10, 0, 40);
+	Message.BackgroundTransparency = 1;
+	Message.TextColor3 = Color3.fromRGB(255, 255, 255);
+	Message.Text = message;
+	Message.Font = Enum.Font.Gotham;
+	Message.TextSize = 12;
+	Message.TextWrapped = true;
+	Message.Parent = MainFrame;
+	local ButtonsFrame = Instance.new("Frame");
+	ButtonsFrame.Name = "ButtonsFrame";
+	ButtonsFrame.Size = UDim2.new(1, -20, 0, 30);
+	ButtonsFrame.Position = UDim2.new(0, 10, 1, -40);
+	ButtonsFrame.BackgroundTransparency = 1;
+	ButtonsFrame.Parent = MainFrame;
+	local UIListLayout = Instance.new("UIListLayout");
+	UIListLayout.FillDirection = Enum.FillDirection.Horizontal;
+	UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center;
+	UIListLayout.Padding = UDim.new(0, 10);
+	UIListLayout.Parent = ButtonsFrame;
+	for i, option in ipairs(options) do
+		local Button = Instance.new("TextButton");
+		Button.Name = option.text .. "Button";
+		Button.Size = UDim2.new(0.5, -10, 1, 0);
+		Button.BackgroundColor3 = Color3.fromRGB(50, 50, 50);
+		Button.TextColor3 = Color3.fromRGB(255, 255, 255);
+		Button.Text = option.text;
+		Button.Font = Enum.Font.Gotham;
+		Button.TextSize = 12;
+		Button.Parent = ButtonsFrame;
+		Button.MouseButton1Click:Connect(function()
+			option.callback();
+			ScreenGui:Destroy();
+		end);
+	end
+	return ScreenGui;
 end
-
-local function createBlur()
-    local blur = Instance.new("BlurEffect")
-    blur.Name = "SpeedBlur"
-    blur.Size = 0
-    blur.Parent = game:GetService("Lighting")
-    tweenService:Create(blur, tweenInfo, {Size = 24}):Play()
-    return blur
+local function CreateGameSelectionUI()
+	local ScreenGui = Instance.new("ScreenGui");
+	ScreenGui.Name = "GameSelectionGUI";
+	ScreenGui.Parent = game:GetService("CoreGui");
+	local MainFrame = Instance.new("Frame");
+	MainFrame.Name = "MainFrame";
+	MainFrame.Size = UDim2.new(0, 300, 0, 250);
+	MainFrame.Position = UDim2.new(0.5, -150, 0.5, -125);
+	MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30);
+	MainFrame.BorderSizePixel = 0;
+	MainFrame.Active = true;
+	MainFrame.Draggable = true;
+	MainFrame.Parent = ScreenGui;
+	local Title = Instance.new("TextLabel");
+	Title.Name = "Title";
+	Title.Size = UDim2.new(1, 0, 0, 30);
+	Title.Position = UDim2.new(0, 0, 0, 0);
+	Title.BackgroundColor3 = Color3.fromRGB(20, 20, 20);
+	Title.TextColor3 = Color3.fromRGB(255, 255, 255);
+	Title.Text = "SELECT SUPPORTED GAME";
+	Title.Font = Enum.Font.GothamBold;
+	Title.TextSize = 14;
+	Title.Parent = MainFrame;
+	local CloseButton = Instance.new("TextButton");
+	CloseButton.Name = "CloseButton";
+	CloseButton.Size = UDim2.new(0, 30, 0, 30);
+	CloseButton.Position = UDim2.new(1, -30, 0, 0);
+	CloseButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50);
+	CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255);
+	CloseButton.Text = "X";
+	CloseButton.Font = Enum.Font.GothamBold;
+	CloseButton.TextSize = 14;
+	CloseButton.Parent = MainFrame;
+	CloseButton.MouseButton1Click:Connect(function()
+		ScreenGui:Destroy();
+	end);
+	local GamesFrame = Instance.new("ScrollingFrame");
+	GamesFrame.Name = "GamesFrame";
+	GamesFrame.Size = UDim2.new(1, -20, 1, -50);
+	GamesFrame.Position = UDim2.new(0, 10, 0, 40);
+	GamesFrame.BackgroundTransparency = 1;
+	GamesFrame.CanvasSize = UDim2.new(0, 0, 0, #supportedGames * 40);
+	GamesFrame.Parent = MainFrame;
+	local UIListLayout = Instance.new("UIListLayout");
+	UIListLayout.Padding = UDim.new(0, 10);
+	UIListLayout.Parent = GamesFrame;
+	for gameId, gameName in pairs(supportedGames) do
+		local GameButton = Instance.new("TextButton");
+		GameButton.Name = gameName .. "Button";
+		GameButton.Size = UDim2.new(1, 0, 0, 30);
+		GameButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50);
+		GameButton.TextColor3 = Color3.fromRGB(255, 255, 255);
+		GameButton.Text = gameName;
+		GameButton.Font = Enum.Font.Gotham;
+		GameButton.TextSize = 12;
+		GameButton.Parent = GamesFrame;
+		GameButton.MouseButton1Click:Connect(function()
+			game:GetService("TeleportService"):Teleport(gameId);
+		end);
+	end
+	return ScreenGui;
 end
-
-local function removeBlur(blur)
-    tweenService:Create(blur, tweenInfo, {Size = 0}):Play()
-    wait(0.3)
-    blur:Destroy()
+local function CreateClientUI()
+	local ScreenGui = Instance.new("ScreenGui");
+	ScreenGui.Name = "ClientGUI";
+	ScreenGui.Parent = game:GetService("CoreGui");
+	local MainFrame = Instance.new("Frame");
+	MainFrame.Name = "MainFrame";
+	MainFrame.Size = UDim2.new(0, 300, 0, 200);
+	MainFrame.Position = UDim2.new(0.5, -150, 0.5, -100);
+	MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30);
+	MainFrame.BorderSizePixel = 0;
+	MainFrame.Active = true;
+	MainFrame.Draggable = true;
+	MainFrame.Parent = ScreenGui;
+	local Title = Instance.new("TextLabel");
+	Title.Name = "Title";
+	Title.Size = UDim2.new(1, 0, 0, 30);
+	Title.Position = UDim2.new(0, 0, 0, 0);
+	Title.BackgroundColor3 = Color3.fromRGB(20, 20, 20);
+	Title.TextColor3 = Color3.fromRGB(255, 255, 255);
+	Title.Text = "CLIENT GUI";
+	Title.Font = Enum.Font.GothamBold;
+	Title.TextSize = 14;
+	Title.Parent = MainFrame;
+	local CloseButton = Instance.new("TextButton");
+	CloseButton.Name = "CloseButton";
+	CloseButton.Size = UDim2.new(0, 30, 0, 30);
+	CloseButton.Position = UDim2.new(1, -30, 0, 0);
+	CloseButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50);
+	CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255);
+	CloseButton.Text = "X";
+	CloseButton.Font = Enum.Font.GothamBold;
+	CloseButton.TextSize = 14;
+	CloseButton.Parent = MainFrame;
+	CloseButton.MouseButton1Click:Connect(function()
+		ScreenGui:Destroy();
+	end);
+	local ButtonsFrame = Instance.new("Frame");
+	ButtonsFrame.Name = "ButtonsFrame";
+	ButtonsFrame.Size = UDim2.new(1, -20, 1, -50);
+	ButtonsFrame.Position = UDim2.new(0, 10, 0, 40);
+	ButtonsFrame.BackgroundTransparency = 1;
+	ButtonsFrame.Parent = MainFrame;
+	local UIListLayout = Instance.new("UIListLayout");
+	UIListLayout.Padding = UDim.new(0, 10);
+	UIListLayout.Parent = ButtonsFrame;
+	local function CreateButton(text, callback)
+		local Button = Instance.new("TextButton");
+		Button.Name = text .. "Button";
+		Button.Size = UDim2.new(1, 0, 0, 30);
+		Button.BackgroundColor3 = Color3.fromRGB(50, 50, 50);
+		Button.TextColor3 = Color3.fromRGB(255, 255, 255);
+		Button.Text = text;
+		Button.Font = Enum.Font.Gotham;
+		Button.TextSize = 12;
+		Button.Parent = ButtonsFrame;
+		Button.MouseButton1Click:Connect(callback);
+		return Button;
+	end
+	local speedEnabled = false;
+	local jumpEnabled = false;
+	local respawnEnabled = false;
+	local originalWalkSpeed = 16;
+	local originalJumpPower = 50;
+	local function ToggleSpeed()
+		speedEnabled = not speedEnabled;
+		local button = ButtonsFrame:FindFirstChild("Speed (x3)Button");
+		if button then
+			button.BackgroundColor3 = (speedEnabled and Color3.fromRGB(50, 255, 50)) or Color3.fromRGB(50, 50, 50);
+		end
+		if (Player.Character and Player.Character:FindFirstChild("Humanoid")) then
+			if speedEnabled then
+				Player.Character.Humanoid.WalkSpeed = originalWalkSpeed * 3;
+			else
+				Player.Character.Humanoid.WalkSpeed = originalWalkSpeed;
+			end
+		end
+		Player.CharacterAdded:Connect(function(character)
+			character:WaitForChild("Humanoid");
+			if speedEnabled then
+				character.Humanoid.WalkSpeed = originalWalkSpeed * 3;
+			else
+				character.Humanoid.WalkSpeed = originalWalkSpeed;
+			end
+		end);
+	end
+	local function ToggleJump()
+		jumpEnabled = not jumpEnabled;
+		local button = ButtonsFrame:FindFirstChild("High Jump (x3)Button");
+		if button then
+			button.BackgroundColor3 = (jumpEnabled and Color3.fromRGB(50, 255, 50)) or Color3.fromRGB(50, 50, 50);
+		end
+		if (Player.Character and Player.Character:FindFirstChild("Humanoid")) then
+			if jumpEnabled then
+				Player.Character.Humanoid.JumpPower = originalJumpPower * 3;
+			else
+				Player.Character.Humanoid.JumpPower = originalJumpPower;
+			end
+		end
+		Player.CharacterAdded:Connect(function(character)
+			character:WaitForChild("Humanoid");
+			if jumpEnabled then
+				character.Humanoid.JumpPower = originalJumpPower * 3;
+			else
+				character.Humanoid.JumpPower = originalJumpPower;
+			end
+		end);
+	end
+	local function ToggleRespawn()
+		respawnEnabled = not respawnEnabled;
+		local button = ButtonsFrame:FindFirstChild("Respawn at Death PosButton");
+		if button then
+			button.BackgroundColor3 = (respawnEnabled and Color3.fromRGB(50, 255, 50)) or Color3.fromRGB(50, 50, 50);
+		end
+		if respawnEnabled then
+			Player.CharacterAdded:Connect(function(character)
+				local humanoid = character:WaitForChild("Humanoid");
+				local hrp = character:WaitForChild("HumanoidRootPart");
+				humanoid.Died:Connect(function()
+					local deathPos = hrp.Position;
+					character:WaitForChild("HumanoidRootPart", 10);
+					if character:FindFirstChild("HumanoidRootPart") then
+						character.HumanoidRootPart.CFrame = CFrame.new(deathPos);
+					end
+				end);
+			end);
+		end
+	end
+	CreateButton("Speed (x3)", ToggleSpeed);
+	CreateButton("High Jump (x3)", ToggleJump);
+	CreateButton("Respawn at Death Pos", ToggleRespawn);
+	local dragging;
+	local dragInput;
+	local dragStart;
+	local startPos;
+	local function update(input)
+		local delta = input.Position - dragStart;
+		MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y);
+	end
+	MainFrame.InputBegan:Connect(function(input)
+		if ((input.UserInputType == Enum.UserInputType.MouseButton1) or (input.UserInputType == Enum.UserInputType.Touch)) then
+			dragging = true;
+			dragStart = input.Position;
+			startPos = MainFrame.Position;
+			input.Changed:Connect(function()
+				if (input.UserInputState == Enum.UserInputState.End) then
+					dragging = false;
+				end
+			end);
+		end
+	end);
+	MainFrame.InputChanged:Connect(function(input)
+		if ((input.UserInputType == Enum.UserInputType.MouseMovement) or (input.UserInputType == Enum.UserInputType.Touch)) then
+			dragInput = input;
+		end
+	end);
+	UIS.InputChanged:Connect(function(input)
+		if ((input == dragInput) and dragging) then
+			update(input);
+		end
+	end);
 end
-
-local function showMethodSelection()
-    if warningActive then return end
-    warningActive = true
-    
-    local blur = createBlur()
-    
-    local selectionGui = Instance.new("ScreenGui")
-    selectionGui.Name = "MethodSelectionGui"
-    selectionGui.Parent = player.PlayerGui
-    selectionGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 350, 0, 250)
-    frame.Position = UDim2.new(0.5, -175, 0.5, -125)
-    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    frame.BackgroundTransparency = 1
-    frame.BorderSizePixel = 0
-    frame.Parent = selectionGui
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 12)
-    corner.Parent = frame
-    
-    local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, 0, 0, 50)
-    title.Position = UDim2.new(0, 0, 0, 0)
-    title.BackgroundTransparency = 1
-    title.Text = "ВЫБЕРИТЕ МЕТОД УСКОРЕНИЯ"
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 20
-    title.TextTransparency = 1
-    title.Parent = frame
-    
-    local listLayout = Instance.new("UIListLayout")
-    listLayout.Padding = UDim.new(0, 15)
-    listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    listLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-    listLayout.Parent = frame
-    
-    local buttons = {}
-    for methodName, methodData in pairs(methods) do
-        local button = Instance.new("TextButton")
-        button.Size = UDim2.new(0.9, 0, 0, 50)
-        button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-        button.BackgroundTransparency = 1
-        button.Text = methodData.name
-        button.TextColor3 = methodName == speedMethod and Color3.fromRGB(150, 255, 150) or Color3.fromRGB(200, 200, 255)
-        button.Font = Enum.Font.Gotham
-        button.TextSize = 18
-        button.TextTransparency = 1
-        button.Parent = frame
-        
-        local buttonCorner = Instance.new("UICorner")
-        buttonCorner.CornerRadius = UDim.new(0, 8)
-        buttonCorner.Parent = button
-        
-        button.MouseEnter:Connect(function()
-            tweenService:Create(button, hoverInfo, {BackgroundColor3 = Color3.fromRGB(70, 70, 70)}):Play()
-        end)
-        
-        button.MouseLeave:Connect(function()
-            tweenService:Create(button, hoverInfo, {BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play()
-        end)
-        
-        button.MouseButton1Click:Connect(function()
-            speedMethod = methodName
-            
-            -- Плавное закрытие окна выбора
-            tweenService:Create(frame, tweenInfo, {BackgroundTransparency = 1}):Play()
-            tweenService:Create(title, tweenInfo, {TextTransparency = 1}):Play()
-            for _, btn in ipairs(buttons) do
-                tweenService:Create(btn, tweenInfo, {BackgroundTransparency = 1, TextTransparency = 1}):Play()
-            end
-            tweenService:Create(cancelButton, tweenInfo, {BackgroundTransparency = 1, TextTransparency = 1}):Play()
-            
-            wait(0.3)
-            selectionGui:Destroy()
-            removeBlur(blur)
-            warningActive = false
-            
-            -- Обновляем кнопку метода в основном GUI
-            methodButton.Text = "Выбор метода"
-            
-            if methods[speedMethod].warning and not warningShown then
-                createWarning(methods[speedMethod].name)
-            end
-        end)
-        
-        table.insert(buttons, button)
-    end
-    
-    local cancelButton = Instance.new("TextButton")
-    cancelButton.Size = UDim2.new(0.9, 0, 0, 50)
-    cancelButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    cancelButton.BackgroundTransparency = 1
-    cancelButton.Text = "ОТМЕНА"
-    cancelButton.TextColor3 = Color3.fromRGB(255, 150, 150)
-    cancelButton.Font = Enum.Font.GothamBold
-    cancelButton.TextSize = 18
-    cancelButton.TextTransparency = 1
-    cancelButton.Parent = frame
-    
-    local cancelCorner = Instance.new("UICorner")
-    cancelCorner.CornerRadius = UDim.new(0, 8)
-    cancelCorner.Parent = cancelButton
-    
-    cancelButton.MouseButton1Click:Connect(function()
-        tweenService:Create(frame, tweenInfo, {BackgroundTransparency = 1}):Play()
-        tweenService:Create(title, tweenInfo, {TextTransparency = 1}):Play()
-        for _, btn in ipairs(buttons) do
-            tweenService:Create(btn, tweenInfo, {BackgroundTransparency = 1, TextTransparency = 1}):Play()
-        end
-        tweenService:Create(cancelButton, tweenInfo, {BackgroundTransparency = 1, TextTransparency = 1}):Play()
-        
-        wait(0.3)
-        selectionGui:Destroy()
-        removeBlur(blur)
-        warningActive = false
-    end)
-    
-    -- Плавное появление окна выбора
-    tweenService:Create(frame, tweenInfo, {BackgroundTransparency = 0.1}):Play()
-    tweenService:Create(title, tweenInfo, {TextTransparency = 0}):Play()
-    for _, btn in ipairs(buttons) do
-        tweenService:Create(btn, tweenInfo, {BackgroundTransparency = 0, TextTransparency = 0}):Play()
-    end
-    tweenService:Create(cancelButton, tweenInfo, {BackgroundTransparency = 0, TextTransparency = 0}):Play()
+if isSupportedGame then
+	local ScreenGui = Instance.new("ScreenGui");
+	ScreenGui.Name = "ServerGUI";
+	ScreenGui.Parent = game:GetService("CoreGui");
+	local MainFrame = Instance.new("Frame");
+	MainFrame.Name = "MainFrame";
+	MainFrame.Size = UDim2.new(0, 300, 0, 350);
+	MainFrame.Position = UDim2.new(0.5, -150, 0.5, -175);
+	MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30);
+	MainFrame.BorderSizePixel = 0;
+	MainFrame.Active = true;
+	MainFrame.Draggable = true;
+	MainFrame.Parent = ScreenGui;
+	local Title = Instance.new("TextLabel");
+	Title.Name = "Title";
+	Title.Size = UDim2.new(1, 0, 0, 30);
+	Title.Position = UDim2.new(0, 0, 0, 0);
+	Title.BackgroundColor3 = Color3.fromRGB(20, 20, 20);
+	Title.TextColor3 = Color3.fromRGB(255, 255, 255);
+	Title.Text = "SERVERSIDE GUI";
+	Title.Font = Enum.Font.GothamBold;
+	Title.TextSize = 14;
+	Title.Parent = MainFrame;
+	local CloseButton = Instance.new("TextButton");
+	CloseButton.Name = "CloseButton";
+	CloseButton.Size = UDim2.new(0, 30, 0, 30);
+	CloseButton.Position = UDim2.new(1, -30, 0, 0);
+	CloseButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50);
+	CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255);
+	CloseButton.Text = "X";
+	CloseButton.Font = Enum.Font.GothamBold;
+	CloseButton.TextSize = 14;
+	CloseButton.Parent = MainFrame;
+	CloseButton.MouseButton1Click:Connect(function()
+		ScreenGui:Destroy();
+	end);
+	local ButtonsFrame = Instance.new("Frame");
+	ButtonsFrame.Name = "ButtonsFrame";
+	ButtonsFrame.Size = UDim2.new(1, -20, 1, -50);
+	ButtonsFrame.Position = UDim2.new(0, 10, 0, 40);
+	ButtonsFrame.BackgroundTransparency = 1;
+	ButtonsFrame.Parent = MainFrame;
+	local UIListLayout = Instance.new("UIListLayout");
+	UIListLayout.Padding = UDim.new(0, 10);
+	UIListLayout.Parent = ButtonsFrame;
+	local function CreateButton(text, callback)
+		local Button = Instance.new("TextButton");
+		Button.Name = text .. "Button";
+		Button.Size = UDim2.new(1, 0, 0, 30);
+		Button.BackgroundColor3 = Color3.fromRGB(50, 50, 50);
+		Button.TextColor3 = Color3.fromRGB(255, 255, 255);
+		Button.Text = text;
+		Button.Font = Enum.Font.Gotham;
+		Button.TextSize = 12;
+		Button.Parent = ButtonsFrame;
+		Button.MouseButton1Click:Connect(callback);
+		return Button;
+	end
+	local function SkipEnd()
+		local args = {[1]="a=Instance.new('Model',workspace)a.Name='yYdWzqdLNUYkrjwPDFkvo'"};
+		game:GetService("ReplicatedStorage").Events.SkipEndEvent:FireServer(unpack(args));
+	end
+	local function KillAll()
+		local args = {[1]="a=Instance.new('Model',workspace)a.Name='wsUdkiJlFXMMPddjqggWkdxbWKX'"};
+		game:GetService("ReplicatedStorage").Events.KillEvent:FireServer(unpack(args));
+	end
+	local webSlingTarget = "All";
+	local webSlingEnabled = false;
+	local webSlingLoop = nil;
+	local crashLoop = nil;
+	local crashEnabled = false;
+	local function FindPlayerByName(partialName)
+		partialName = partialName:lower();
+		for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+			if player.Name:lower():find(partialName) then
+				return player;
+			end
+		end
+		return nil;
+	end
+	local function ToggleWebSlingTarget()
+		local inputGui = Instance.new("ScreenGui");
+		inputGui.Name = "WebSlingInputGUI";
+		inputGui.Parent = game:GetService("CoreGui");
+		local inputFrame = Instance.new("Frame");
+		inputFrame.Name = "InputFrame";
+		inputFrame.Size = UDim2.new(0, 250, 0, 150);
+		inputFrame.Position = UDim2.new(0.5, -125, 0.5, -75);
+		inputFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30);
+		inputFrame.BorderSizePixel = 0;
+		inputFrame.Active = true;
+		inputFrame.Draggable = true;
+		inputFrame.Parent = inputGui;
+		local title = Instance.new("TextLabel");
+		title.Name = "Title";
+		title.Size = UDim2.new(1, 0, 0, 30);
+		title.Position = UDim2.new(0, 0, 0, 0);
+		title.BackgroundColor3 = Color3.fromRGB(20, 20, 20);
+		title.TextColor3 = Color3.fromRGB(255, 255, 255);
+		title.Text = "Enter Player Name (partial)";
+		title.Font = Enum.Font.GothamBold;
+		title.TextSize = 14;
+		title.Parent = inputFrame;
+		local inputBox = Instance.new("TextBox");
+		inputBox.Name = "InputBox";
+		inputBox.Size = UDim2.new(1, -20, 0, 30);
+		inputBox.Position = UDim2.new(0, 10, 0, 40);
+		inputBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50);
+		inputBox.TextColor3 = Color3.fromRGB(255, 255, 255);
+		inputBox.Text = "";
+		inputBox.Font = Enum.Font.Gotham;
+		inputBox.TextSize = 12;
+		inputBox.PlaceholderText = "Enter partial name or 'all'";
+		inputBox.Parent = inputFrame;
+		local buttonsFrame = Instance.new("Frame");
+		buttonsFrame.Name = "ButtonsFrame";
+		buttonsFrame.Size = UDim2.new(1, -20, 0, 30);
+		buttonsFrame.Position = UDim2.new(0, 10, 1, -40);
+		buttonsFrame.BackgroundTransparency = 1;
+		buttonsFrame.Parent = inputFrame;
+		local listLayout = Instance.new("UIListLayout");
+		listLayout.FillDirection = Enum.FillDirection.Horizontal;
+		listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center;
+		listLayout.Padding = UDim.new(0, 10);
+		listLayout.Parent = buttonsFrame;
+		local confirmButton = Instance.new("TextButton");
+		confirmButton.Name = "ConfirmButton";
+		confirmButton.Size = UDim2.new(0.5, -10, 1, 0);
+		confirmButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50);
+		confirmButton.TextColor3 = Color3.fromRGB(255, 255, 255);
+		confirmButton.Text = "Confirm";
+		confirmButton.Font = Enum.Font.Gotham;
+		confirmButton.TextSize = 12;
+		confirmButton.Parent = buttonsFrame;
+		local cancelButton = Instance.new("TextButton");
+		cancelButton.Name = "CancelButton";
+		cancelButton.Size = UDim2.new(0.5, -10, 1, 0);
+		cancelButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50);
+		cancelButton.TextColor3 = Color3.fromRGB(255, 255, 255);
+		cancelButton.Text = "Cancel";
+		cancelButton.Font = Enum.Font.Gotham;
+		cancelButton.TextSize = 12;
+		cancelButton.Parent = buttonsFrame;
+		confirmButton.MouseButton1Click:Connect(function()
+			local inputText = inputBox.Text:lower();
+			if ((inputText == "all") or (inputText == "")) then
+				webSlingTarget = "All";
+			else
+				local player = FindPlayerByName(inputText);
+				if player then
+					webSlingTarget = player.Name;
+				else
+					webSlingTarget = "All";
+				end
+			end
+			inputGui:Destroy();
+			local button = ButtonsFrame:FindFirstChild("Web Sling TargetButton");
+			if button then
+				button.Text = "Web Sling Target: " .. webSlingTarget;
+			end
+		end);
+		cancelButton.MouseButton1Click:Connect(function()
+			inputGui:Destroy();
+		end);
+	end
+	local function ToggleWebSling()
+		webSlingEnabled = not webSlingEnabled;
+		local button = ButtonsFrame:FindFirstChild("Web SlingButton");
+		if button then
+			button.BackgroundColor3 = (webSlingEnabled and Color3.fromRGB(50, 255, 50)) or Color3.fromRGB(50, 50, 50);
+		end
+		if webSlingEnabled then
+			webSlingLoop = game:GetService("RunService").Heartbeat:Connect(function()
+				pcall(function()
+					local character = Player.Character;
+					if character then
+						local tool = character:FindFirstChild("web sling") or Player.Backpack:FindFirstChild("web sling");
+						if tool then
+							tool.Parent = character;
+							local target = nil;
+							if (webSlingTarget ~= "All") then
+								target = game:GetService("Players"):FindFirstChild(webSlingTarget);
+							end
+							if (target and target.Character and target.Character:FindFirstChild("HumanoidRootPart")) then
+								local args = {[1]=1,[2]=target.Character.HumanoidRootPart.Position};
+								tool.UserInput:FireServer(unpack(args));
+							elseif (webSlingTarget == "All") then
+								for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+									if ((player ~= Player) and player.Character and player.Character:FindFirstChild("HumanoidRootPart")) then
+										local args = {[1]=1,[2]=player.Character.HumanoidRootPart.Position};
+										tool.UserInput:FireServer(unpack(args));
+									end
+								end
+							end
+						end
+					end
+				end);
+			end);
+		elseif webSlingLoop then
+			webSlingLoop:Disconnect();
+			webSlingLoop = nil;
+		end
+	end
+	local function NewCrashServer()
+		crashEnabled = not crashEnabled;
+		local button = ButtonsFrame:FindFirstChild("Crash ServerButton");
+		if button then
+			button.BackgroundColor3 = (crashEnabled and Color3.fromRGB(255, 50, 50)) or Color3.fromRGB(50, 50, 50);
+		end
+		if crashEnabled then
+			KillAll();
+			crashLoop = game:GetService("RunService").Heartbeat:Connect(function()
+				if not crashEnabled then
+					return;
+				end
+				if (#game:GetService("Players"):GetPlayers() <= 1) then
+					crashEnabled = false;
+					if button then
+						button.BackgroundColor3 = Color3.fromRGB(50, 50, 50);
+					end
+					return;
+				end
+				KillAll();
+				local vulnerableNumbers = {math.huge,-math.huge,NaN,(math.huge * 0),(1 / 0),(-1 / 0)};
+				pcall(function()
+					local character = Player.Character;
+					if character then
+						local tool = character:FindFirstChild("web sling") or Player.Backpack:FindFirstChild("web sling");
+						if tool then
+							tool.Parent = character;
+							for _, num in ipairs(vulnerableNumbers) do
+								local args = {[1]=num,[2]=Vector3.new(num, num, num)};
+								tool.UserInput:FireServer(unpack(args));
+							end
+						end
+					end
+				end);
+			end);
+		elseif crashLoop then
+			crashLoop:Disconnect();
+			crashLoop = nil;
+		end
+	end
+	local loopKillEnabled = false;
+	local lastDeathPositions = {};
+	local loopKillConnection = nil;
+	local killLoop = nil;
+	local function LoopKillAll()
+		loopKillEnabled = not loopKillEnabled;
+		local button = ButtonsFrame:FindFirstChild("Loop Kill AllButton");
+		if button then
+			button.BackgroundColor3 = (loopKillEnabled and Color3.fromRGB(255, 50, 50)) or Color3.fromRGB(50, 50, 50);
+		end
+		if loopKillEnabled then
+			for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+				if (player.Character and player.Character:FindFirstChild("HumanoidRootPart")) then
+					lastDeathPositions[player.Name] = player.Character.HumanoidRootPart.Position;
+				end
+			end
+			KillAll();
+			killLoop = game:GetService("RunService").Heartbeat:Connect(function()
+				if not loopKillEnabled then
+					return;
+				end
+				KillAll();
+				wait(2.5);
+				for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+					if lastDeathPositions[player.Name] then
+						pcall(function()
+							if (player.Character and player.Character:FindFirstChild("HumanoidRootPart")) then
+								player.Character.HumanoidRootPart.CFrame = CFrame.new(lastDeathPositions[player.Name]);
+							end
+						end);
+					end
+				end
+			end);
+			loopKillConnection = game:GetService("Players").PlayerAdded:Connect(function(player)
+				player.CharacterAdded:Connect(function(character)
+					character:WaitForChild("Humanoid").Died:Connect(function()
+						if character:FindFirstChild("HumanoidRootPart") then
+							lastDeathPositions[player.Name] = character.HumanoidRootPart.Position;
+						end
+					end);
+				end);
+			end);
+			for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
+				if player.Character then
+					player.Character:WaitForChild("Humanoid").Died:Connect(function()
+						if (player.Character and player.Character:FindFirstChild("HumanoidRootPart")) then
+							lastDeathPositions[player.Name] = player.Character.HumanoidRootPart.Position;
+						end
+					end);
+				end
+				player.CharacterAdded:Connect(function(character)
+					character:WaitForChild("Humanoid").Died:Connect(function()
+						if character:FindFirstChild("HumanoidRootPart") then
+							lastDeathPositions[player.Name] = character.HumanoidRootPart.Position;
+						end
+					end);
+				end);
+			end
+		else
+			if killLoop then
+				killLoop:Disconnect();
+				killLoop = nil;
+			end
+			if loopKillConnection then
+				loopKillConnection:Disconnect();
+				loopKillConnection = nil;
+			end
+			lastDeathPositions = {};
+		end
+	end
+	local platform = nil;
+	local platformEnabled = false;
+	local platformConnection = nil;
+	local platformDescentSpeed = 0.5;
+	local function ToggleFlyingPlatform()
+		platformEnabled = not platformEnabled;
+		local button = ButtonsFrame:FindFirstChild("Flying PlatformButton");
+		if button then
+			button.BackgroundColor3 = (platformEnabled and Color3.fromRGB(50, 255, 50)) or Color3.fromRGB(50, 50, 50);
+		end
+		if platformEnabled then
+			platform = Instance.new("Part");
+			platform.Name = "FlyingPlatform";
+			platform.Size = Vector3.new(15, 1, 15);
+			platform.Anchored = true;
+			platform.CanCollide = true;
+			platform.Transparency = 0.7;
+			platform.Material = Enum.Material.Neon;
+			platform.Color = Color3.fromRGB(100, 200, 255);
+			platform.Parent = workspace;
+			if (Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")) then
+				local hrp = Player.Character.HumanoidRootPart;
+				platform.Position = hrp.Position - Vector3.new(0, 4, 0);
+				platform.Orientation = Vector3.new(0, hrp.Orientation.Y, 0);
+			end
+			platformConnection = game:GetService("RunService").Heartbeat:Connect(function(dt)
+				if (not platform or not Player.Character or not Player.Character:FindFirstChild("HumanoidRootPart")) then
+					return;
+				end
+				local hrp = Player.Character.HumanoidRootPart;
+				local currentPos = platform.Position;
+				local targetY = hrp.Position.Y - 4;
+				if ((Player.Character.Humanoid:GetState() == Enum.HumanoidStateType.Running) or (Player.Character.Humanoid:GetState() == Enum.HumanoidStateType.RunningNoPhysics) or (Player.Character.Humanoid:GetState() == Enum.HumanoidStateType.GettingUp) or (Player.Character.Humanoid:GetState() == Enum.HumanoidStateType.Landed)) then
+					targetY = currentPos.Y - (platformDescentSpeed * dt);
+				else
+					targetY = math.max(currentPos.Y, hrp.Position.Y - 4);
+				end
+				local targetX = hrp.Position.X;
+				local targetZ = hrp.Position.Z;
+				local newX = currentPos.X + ((targetX - currentPos.X) * 0.1);
+				local newZ = currentPos.Z + ((targetZ - currentPos.Z) * 0.1);
+				platform.Position = Vector3.new(newX, targetY, newZ);
+				platform.Orientation = Vector3.new(0, hrp.Orientation.Y, 0);
+			end);
+		else
+			if platform then
+				platform:Destroy();
+				platform = nil;
+			end
+			if platformConnection then
+				platformConnection:Disconnect();
+				platformConnection = nil;
+			end
+		end
+	end
+	CreateButton("Skip End", SkipEnd);
+	CreateButton("Kill All", KillAll);
+	CreateButton("Loop Kill All", LoopKillAll);
+	CreateButton("Flying Platform", ToggleFlyingPlatform);
+	CreateButton("Web Sling", ToggleWebSling);
+	CreateButton("Web Sling Target: All", ToggleWebSlingTarget);
+	CreateButton("Crash Server", NewCrashServer);
+	CreateButton("Open Client GUI", CreateClientUI);
+	local dragging;
+	local dragInput;
+	local dragStart;
+	local startPos;
+	local function update(input)
+		local delta = input.Position - dragStart;
+		MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y);
+	end
+	MainFrame.InputBegan:Connect(function(input)
+		if ((input.UserInputType == Enum.UserInputType.MouseButton1) or (input.UserInputType == Enum.UserInputType.Touch)) then
+			dragging = true;
+			dragStart = input.Position;
+			startPos = MainFrame.Position;
+			input.Changed:Connect(function()
+				if (input.UserInputState == Enum.UserInputState.End) then
+					dragging = false;
+				end
+			end);
+		end
+	end);
+	MainFrame.InputChanged:Connect(function(input)
+		if ((input.UserInputType == Enum.UserInputType.MouseMovement) or (input.UserInputType == Enum.UserInputType.Touch)) then
+			dragInput = input;
+		end
+	end);
+	UIS.InputChanged:Connect(function(input)
+		if ((input == dragInput) and dragging) then
+			update(input);
+		end
+	end);
+elseif (hasSkipEndEvent and hasKillEvent) then
+	CreateMessageBox("Script Detected", "This game might support this script. Do you want to try running it?", {{text="Yes",callback=function()
+	end},{text="No",callback=function()
+	end}});
+else
+	CreateMessageBox("Unsupported Game", "This game is not supported by this script. Would you like to teleport to a supported game?", {{text="Yes",callback=function()
+		CreateGameSelectionUI();
+	end},{text="No",callback=function()
+	end}});
 end
-
-local function createWarning(methodName)
-    if warningShown then return end
-    warningActive = true
-    warningShown = true
-    lockMovement(true)
-    
-    local blur = Instance.new("BlurEffect")
-    blur.Name = "SpeedWarningBlur"
-    blur.Size = 0
-    blur.Parent = game:GetService("Lighting")
-    
-    tweenService:Create(blur, tweenInfo, {Size = 24}):Play()
-    
-    local textGui = Instance.new("ScreenGui")
-    textGui.Name = "SpeedWarningGui"
-    textGui.Parent = player.PlayerGui
-    textGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 400, 0, 220)
-    frame.Position = UDim2.new(0.5, -200, 0.5, -110)
-    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    frame.BackgroundTransparency = 1
-    frame.BorderSizePixel = 0
-    frame.Parent = textGui
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 12)
-    corner.Parent = frame
-    
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0.9, 0, 0.6, 0)
-    label.Position = UDim2.new(0.05, 0, 0.1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = "ВНИМАНИЕ: Метод '"..methodName.."' может быть обнаружен античитами!\nИспользуйте на свой страх и риск!!!"
-    label.TextColor3 = Color3.fromRGB(255, 100, 100)
-    label.Font = Enum.Font.GothamBold
-    label.TextSize = 16
-    label.TextWrapped = true
-    label.TextTransparency = 1
-    label.Parent = frame
-    
-    local continueButton = Instance.new("TextButton")
-    continueButton.Size = UDim2.new(0.8, 0, 0.2, 0)
-    continueButton.Position = UDim2.new(0.1, 0, 0.7, 0)
-    continueButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    continueButton.BackgroundTransparency = 0.8
-    continueButton.Text = "ПРОДОЛЖИТЬ"
-    continueButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    continueButton.Font = Enum.Font.GothamBold
-    continueButton.TextSize = 14
-    continueButton.TextTransparency = 1
-    continueButton.Parent = frame
-    
-    local buttonCorner = Instance.new("UICorner")
-    buttonCorner.CornerRadius = UDim.new(0, 8)
-    buttonCorner.Parent = continueButton
-    
-    -- Плавное появление предупреждения
-    tweenService:Create(frame, tweenInfo, {BackgroundTransparency = 0.2}):Play()
-    tweenService:Create(label, tweenInfo, {TextTransparency = 0}):Play()
-    tweenService:Create(continueButton, tweenInfo, {TextTransparency = 0, BackgroundTransparency = 0.5}):Play()
-    
-    continueButton.MouseButton1Click:Connect(function()
-        tweenService:Create(frame, tweenInfo, {BackgroundTransparency = 1}):Play()
-        tweenService:Create(label, tweenInfo, {TextTransparency = 1}):Play()
-        tweenService:Create(continueButton, tweenInfo, {TextTransparency = 1, BackgroundTransparency = 1}):Play()
-        tweenService:Create(blur, tweenInfo, {Size = 0}):Play()
-        
-        wait(0.3)
-        textGui:Destroy()
-        blur:Destroy()
-        warningActive = false
-        lockMovement(false)
-    end)
-end
-
-local function applySpeedBoost()
-    if not enabled or warningActive or not character:FindFirstChild("HumanoidRootPart") then return end
-    
-    local method = methods[speedMethod]
-    if method then
-        method.apply()
-    end
-end
-
--- Создание основного GUI
-local gui = Instance.new("ScreenGui")
-gui.Name = "SpeedGUI"
-gui.Parent = player.PlayerGui
-gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 320, 0, 250)
-frame.Position = UDim2.new(0.5, -160, 0.5, -125)
-frame.AnchorPoint = Vector2.new(0.5, 0.5)
-frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-frame.BackgroundTransparency = 1
-frame.BorderSizePixel = 0
-frame.ClipsDescendants = true
-frame.Parent = gui
-
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 14)
-corner.Parent = frame
-
--- Плавное появление основного окна
-tweenService:Create(frame, tweenInfo, {BackgroundTransparency = 0.1}):Play()
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -50, 0, 40)
-title.Position = UDim2.new(0, 0, 0, 0)
-title.BackgroundTransparency = 1
-title.Text = "УПРАВЛЕНИЕ СКОРОСТЬЮ"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 18
-title.TextTransparency = 0
-title.Parent = frame
-
-local closeButton = Instance.new("TextButton")
-closeButton.Size = UDim2.new(0, 30, 0, 30)
-closeButton.Position = UDim2.new(1, -35, 0, 5)
-closeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeButton.Text = "×"
-closeButton.Font = Enum.Font.GothamBold
-closeButton.TextSize = 20
-closeButton.TextTransparency = 0
-closeButton.Parent = frame
-
-local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(1, 0)
-closeCorner.Parent = closeButton
-
-closeButton.MouseEnter:Connect(function()
-    tweenService:Create(closeButton, hoverInfo, {BackgroundColor3 = Color3.fromRGB(60, 60, 60)}):Play()
-end)
-
-closeButton.MouseLeave:Connect(function()
-    tweenService:Create(closeButton, hoverInfo, {BackgroundColor3 = Color3.fromRGB(40, 40, 40)}):Play()
-end)
-
-closeButton.MouseButton1Click:Connect(function()
-    tweenService:Create(frame, tweenInfo, {BackgroundTransparency = 1}):Play()
-    wait(0.3)
-    gui:Destroy()
-end)
-
-local methodButton = Instance.new("TextButton")
-methodButton.Size = UDim2.new(0.8, 0, 0, 40)
-methodButton.Position = UDim2.new(0.1, 0, 0.2, 0)
-methodButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-methodButton.Text = "Выбери метод"
-methodButton.TextColor3 = Color3.fromRGB(200, 200, 255)
-methodButton.Font = Enum.Font.Gotham
-methodButton.TextSize = 14
-methodButton.Parent = frame
-
-local methodCorner = Instance.new("UICorner")
-methodCorner.CornerRadius = UDim.new(0, 8)
-methodCorner.Parent = methodButton
-
-methodButton.MouseEnter:Connect(function()
-    tweenService:Create(methodButton, hoverInfo, {BackgroundColor3 = Color3.fromRGB(70, 70, 70)}):Play()
-end)
-
-methodButton.MouseLeave:Connect(function()
-    tweenService:Create(methodButton, hoverInfo, {BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play()
-end)
-
-methodButton.MouseButton1Click:Connect(showMethodSelection)
-
-local toggle = Instance.new("TextButton")
-toggle.Size = UDim2.new(0.8, 0, 0, 40)
-toggle.Position = UDim2.new(0.1, 0, 0.45, 0)
-toggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-toggle.Text = "ВКЛЮЧЕНО"
-toggle.TextColor3 = Color3.fromRGB(150, 255, 150)
-toggle.Font = Enum.Font.GothamBold
-toggle.TextSize = 16
-toggle.Parent = frame
-
-local toggleCorner = Instance.new("UICorner")
-toggleCorner.CornerRadius = UDim.new(0, 8)
-toggleCorner.Parent = toggle
-
-toggle.MouseEnter:Connect(function()
-    tweenService:Create(toggle, hoverInfo, {BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play()
-end)
-
-toggle.MouseLeave:Connect(function()
-    tweenService:Create(toggle, hoverInfo, {BackgroundColor3 = Color3.fromRGB(40, 40, 40)}):Play()
-end)
-
-toggle.MouseButton1Click:Connect(function()
-    enabled = not enabled
-    if enabled then
-        toggle.Text = "ВКЛЮЧЕНО"
-        tweenService:Create(toggle, tweenInfo, {TextColor3 = Color3.fromRGB(150, 255, 150)}):Play()
-    else
-        toggle.Text = "ВЫКЛЮЧЕНО"
-        tweenService:Create(toggle, tweenInfo, {TextColor3 = Color3.fromRGB(255, 150, 150)}):Play()
-    end
-end)
-
-local sliderContainer = Instance.new("Frame")
-sliderContainer.Size = UDim2.new(0.8, 0, 0, 60)
-sliderContainer.Position = UDim2.new(0.1, 0, 0.75, 0)
-sliderContainer.BackgroundTransparency = 1
-sliderContainer.Parent = frame
-
-local slider = Instance.new("Frame")
-slider.Size = UDim2.new(1, 0, 0, 10)
-slider.Position = UDim2.new(0, 0, 0.5, 0)
-slider.AnchorPoint = Vector2.new(0, 0.5)
-slider.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-slider.Parent = sliderContainer
-
-local sliderCorner = Instance.new("UICorner")
-sliderCorner.CornerRadius = UDim.new(1, 0)
-sliderCorner.Parent = slider
-
-local sliderFill = Instance.new("Frame")
-sliderFill.Size = UDim2.new(0.5, 0, 1, 0)
-sliderFill.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
-sliderFill.Parent = slider
-
-local fillCorner = Instance.new("UICorner")
-fillCorner.CornerRadius = UDim.new(1, 0)
-fillCorner.Parent = sliderFill
-
-local sliderText = Instance.new("TextLabel")
-sliderText.Size = UDim2.new(1, 0, 0, 25)
-sliderText.Position = UDim2.new(0, 0, 0, 0)
-sliderText.BackgroundTransparency = 1
-sliderText.Text = "СКОРОСТЬ: 1.0x"
-sliderText.TextColor3 = Color3.fromRGB(255, 255, 255)
-sliderText.Font = Enum.Font.Gotham
-sliderText.TextSize = 14
-sliderText.Parent = sliderContainer
-
-local function updateSlider(value)
-    local x = math.clamp(value, 0, 1)
-    speedMultiplier = 1 + x * (maxSpeedMultiplier - 1)
-    sliderFill.Size = UDim2.new(x, 0, 1, 0)
-    sliderText.Text = string.format("СКОРОСТЬ: %.1fx", speedMultiplier)
-end
-
-local dragging = false
-local dragStart, frameStart
-
-title.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        frameStart = frame.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end
-end)
-
-title.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
-        local delta = input.Position - dragStart
-        frame.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + delta.X, frameStart.Y.Scale, frameStart.Y.Offset + delta.Y)
-    end
-end)
-
-local draggingSlider = false
-
-slider.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        draggingSlider = true
-        local x = (input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X
-        updateSlider(x)
-    end
-end)
-
-game:GetService("UserInputService").InputChanged:Connect(function(input)
-    if draggingSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local x = (input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X
-        updateSlider(x)
-    end
-end)
-
-game:GetService("UserInputService").InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        draggingSlider = false
-    end
-end)
-
-game:GetService("RunService").Heartbeat:Connect(applySpeedBoost)
