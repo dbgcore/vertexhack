@@ -1,24 +1,492 @@
-HashedIds,Ids
-7d56799a,vertex-premium ( ID UNKNOWN )
-0adb8a27,vertex-premium ( ID UNKNOWN )
-512e50a0,vertex-premium ( ID UNKNOWN )
-f3f619ce,vertex-premium ( ID UNKNOWN )
-aeca4d94,vertex-premium ( ID UNKNOWN )
-720837c7,vertex-premium ( ID REMOVED )
-11a1d1e1,857400573342384159
-f2c837f4,477217807050735616
-6a3d6f58,477217807050735616
-e0e2c8a8,477217807050735616
-81f67075,1085176939720998932
-19faed5a,1010338551998713886-PB (5FW90420K5079760N)
-4f85f027,1010338551998713886-PB
-219ad17f,1010338551998713886-PB
-b5580035,806002875163082763-PB (5D472213MR286814L)
-dc5c8b77,1252414127918546996-PB (5X111509XH806132B)
-f97dc95a,1252414127918546996-PB
-c82a6d52,1252414127918546996-PB
-b06670cc,1328731120728145930-PB ( Robux Payment )
-590f8c31,1328731120728145930-PB
-ee90e456,1328731120728145930-PB
-6ffbb74c,vertex-premium ( ID UNKNOWN )
-7a8b8c34,vertex-premium ( ID UNKNOWN )
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+
+local speedMultiplier = 1
+local enabled = true
+local maxSpeedMultiplier = 10
+local warningShown = false
+local warningActive = false
+local speedMethod = "CFrame"
+
+local methods = {
+    CFrame = {
+        name = "Sleepwalking (undetected)",
+        warning = false,
+        apply = function()
+            local moveDirection = humanoid.MoveDirection
+            if moveDirection.Magnitude > 0 then
+                local rootPart = character.HumanoidRootPart
+                rootPart.CFrame = rootPart.CFrame + moveDirection * (humanoid.WalkSpeed * (speedMultiplier - 1) * 0.15)
+            end
+        end
+    },
+    Velocity = {
+        name = "HumanoidFucker (detected)",
+        warning = true,
+        apply = function()
+            local moveDirection = humanoid.MoveDirection
+            if moveDirection.Magnitude > 0 then
+                character.HumanoidRootPart.Velocity = character.HumanoidRootPart.Velocity + moveDirection * (humanoid.WalkSpeed * (speedMultiplier - 1) * 2)
+            end
+        end
+    }
+}
+
+local tweenService = game:GetService("TweenService")
+local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local hoverInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+local function lockMovement(lock)
+    if lock then
+        humanoid:SetAttribute("OriginalWalkSpeed", humanoid.WalkSpeed)
+        humanoid.WalkSpeed = 0
+    else
+        local originalSpeed = humanoid:GetAttribute("OriginalWalkSpeed")
+        if originalSpeed then
+            humanoid.WalkSpeed = originalSpeed
+        end
+    end
+end
+
+local function createBlur()
+    local blur = Instance.new("BlurEffect")
+    blur.Name = "SpeedBlur"
+    blur.Size = 0
+    blur.Parent = game:GetService("Lighting")
+    tweenService:Create(blur, tweenInfo, {Size = 24}):Play()
+    return blur
+end
+
+local function removeBlur(blur)
+    tweenService:Create(blur, tweenInfo, {Size = 0}):Play()
+    wait(0.3)
+    blur:Destroy()
+end
+
+local function showMethodSelection()
+    if warningActive then return end
+    warningActive = true
+    
+    local blur = createBlur()
+    
+    local selectionGui = Instance.new("ScreenGui")
+    selectionGui.Name = "MethodSelectionGui"
+    selectionGui.Parent = player.PlayerGui
+    selectionGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 350, 0, 250)
+    frame.Position = UDim2.new(0.5, -175, 0.5, -125)
+    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    frame.BackgroundTransparency = 1
+    frame.BorderSizePixel = 0
+    frame.Parent = selectionGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = frame
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 50)
+    title.Position = UDim2.new(0, 0, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "ВЫБЕРИТЕ МЕТОД УСКОРЕНИЯ"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 20
+    title.TextTransparency = 1
+    title.Parent = frame
+    
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.Padding = UDim.new(0, 15)
+    listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    listLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+    listLayout.Parent = frame
+    
+    local buttons = {}
+    for methodName, methodData in pairs(methods) do
+        local button = Instance.new("TextButton")
+        button.Size = UDim2.new(0.9, 0, 0, 50)
+        button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+        button.BackgroundTransparency = 1
+        button.Text = methodData.name
+        button.TextColor3 = methodName == speedMethod and Color3.fromRGB(150, 255, 150) or Color3.fromRGB(200, 200, 255)
+        button.Font = Enum.Font.Gotham
+        button.TextSize = 18
+        button.TextTransparency = 1
+        button.Parent = frame
+        
+        local buttonCorner = Instance.new("UICorner")
+        buttonCorner.CornerRadius = UDim.new(0, 8)
+        buttonCorner.Parent = button
+        
+        button.MouseEnter:Connect(function()
+            tweenService:Create(button, hoverInfo, {BackgroundColor3 = Color3.fromRGB(70, 70, 70)}):Play()
+        end)
+        
+        button.MouseLeave:Connect(function()
+            tweenService:Create(button, hoverInfo, {BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play()
+        end)
+        
+        button.MouseButton1Click:Connect(function()
+            speedMethod = methodName
+            
+            -- Плавное закрытие окна выбора
+            tweenService:Create(frame, tweenInfo, {BackgroundTransparency = 1}):Play()
+            tweenService:Create(title, tweenInfo, {TextTransparency = 1}):Play()
+            for _, btn in ipairs(buttons) do
+                tweenService:Create(btn, tweenInfo, {BackgroundTransparency = 1, TextTransparency = 1}):Play()
+            end
+            tweenService:Create(cancelButton, tweenInfo, {BackgroundTransparency = 1, TextTransparency = 1}):Play()
+            
+            wait(0.3)
+            selectionGui:Destroy()
+            removeBlur(blur)
+            warningActive = false
+            
+            -- Обновляем кнопку метода в основном GUI
+            methodButton.Text = "Выбор метода"
+            
+            if methods[speedMethod].warning and not warningShown then
+                createWarning(methods[speedMethod].name)
+            end
+        end)
+        
+        table.insert(buttons, button)
+    end
+    
+    local cancelButton = Instance.new("TextButton")
+    cancelButton.Size = UDim2.new(0.9, 0, 0, 50)
+    cancelButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    cancelButton.BackgroundTransparency = 1
+    cancelButton.Text = "ОТМЕНА"
+    cancelButton.TextColor3 = Color3.fromRGB(255, 150, 150)
+    cancelButton.Font = Enum.Font.GothamBold
+    cancelButton.TextSize = 18
+    cancelButton.TextTransparency = 1
+    cancelButton.Parent = frame
+    
+    local cancelCorner = Instance.new("UICorner")
+    cancelCorner.CornerRadius = UDim.new(0, 8)
+    cancelCorner.Parent = cancelButton
+    
+    cancelButton.MouseButton1Click:Connect(function()
+        tweenService:Create(frame, tweenInfo, {BackgroundTransparency = 1}):Play()
+        tweenService:Create(title, tweenInfo, {TextTransparency = 1}):Play()
+        for _, btn in ipairs(buttons) do
+            tweenService:Create(btn, tweenInfo, {BackgroundTransparency = 1, TextTransparency = 1}):Play()
+        end
+        tweenService:Create(cancelButton, tweenInfo, {BackgroundTransparency = 1, TextTransparency = 1}):Play()
+        
+        wait(0.3)
+        selectionGui:Destroy()
+        removeBlur(blur)
+        warningActive = false
+    end)
+    
+    -- Плавное появление окна выбора
+    tweenService:Create(frame, tweenInfo, {BackgroundTransparency = 0.1}):Play()
+    tweenService:Create(title, tweenInfo, {TextTransparency = 0}):Play()
+    for _, btn in ipairs(buttons) do
+        tweenService:Create(btn, tweenInfo, {BackgroundTransparency = 0, TextTransparency = 0}):Play()
+    end
+    tweenService:Create(cancelButton, tweenInfo, {BackgroundTransparency = 0, TextTransparency = 0}):Play()
+end
+
+local function createWarning(methodName)
+    if warningShown then return end
+    warningActive = true
+    warningShown = true
+    lockMovement(true)
+    
+    local blur = Instance.new("BlurEffect")
+    blur.Name = "SpeedWarningBlur"
+    blur.Size = 0
+    blur.Parent = game:GetService("Lighting")
+    
+    tweenService:Create(blur, tweenInfo, {Size = 24}):Play()
+    
+    local textGui = Instance.new("ScreenGui")
+    textGui.Name = "SpeedWarningGui"
+    textGui.Parent = player.PlayerGui
+    textGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 400, 0, 220)
+    frame.Position = UDim2.new(0.5, -200, 0.5, -110)
+    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    frame.BackgroundTransparency = 1
+    frame.BorderSizePixel = 0
+    frame.Parent = textGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = frame
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.9, 0, 0.6, 0)
+    label.Position = UDim2.new(0.05, 0, 0.1, 0)
+    label.BackgroundTransparency = 1
+    label.Text = "ВНИМАНИЕ: Метод '"..methodName.."' может быть обнаружен античитами!\nИспользуйте на свой страх и риск!!!"
+    label.TextColor3 = Color3.fromRGB(255, 100, 100)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 16
+    label.TextWrapped = true
+    label.TextTransparency = 1
+    label.Parent = frame
+    
+    local continueButton = Instance.new("TextButton")
+    continueButton.Size = UDim2.new(0.8, 0, 0.2, 0)
+    continueButton.Position = UDim2.new(0.1, 0, 0.7, 0)
+    continueButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    continueButton.BackgroundTransparency = 0.8
+    continueButton.Text = "ПРОДОЛЖИТЬ"
+    continueButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    continueButton.Font = Enum.Font.GothamBold
+    continueButton.TextSize = 14
+    continueButton.TextTransparency = 1
+    continueButton.Parent = frame
+    
+    local buttonCorner = Instance.new("UICorner")
+    buttonCorner.CornerRadius = UDim.new(0, 8)
+    buttonCorner.Parent = continueButton
+    
+    -- Плавное появление предупреждения
+    tweenService:Create(frame, tweenInfo, {BackgroundTransparency = 0.2}):Play()
+    tweenService:Create(label, tweenInfo, {TextTransparency = 0}):Play()
+    tweenService:Create(continueButton, tweenInfo, {TextTransparency = 0, BackgroundTransparency = 0.5}):Play()
+    
+    continueButton.MouseButton1Click:Connect(function()
+        tweenService:Create(frame, tweenInfo, {BackgroundTransparency = 1}):Play()
+        tweenService:Create(label, tweenInfo, {TextTransparency = 1}):Play()
+        tweenService:Create(continueButton, tweenInfo, {TextTransparency = 1, BackgroundTransparency = 1}):Play()
+        tweenService:Create(blur, tweenInfo, {Size = 0}):Play()
+        
+        wait(0.3)
+        textGui:Destroy()
+        blur:Destroy()
+        warningActive = false
+        lockMovement(false)
+    end)
+end
+
+local function applySpeedBoost()
+    if not enabled or warningActive or not character:FindFirstChild("HumanoidRootPart") then return end
+    
+    local method = methods[speedMethod]
+    if method then
+        method.apply()
+    end
+end
+
+-- Создание основного GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "SpeedGUI"
+gui.Parent = player.PlayerGui
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 320, 0, 250)
+frame.Position = UDim2.new(0.5, -160, 0.5, -125)
+frame.AnchorPoint = Vector2.new(0.5, 0.5)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+frame.BackgroundTransparency = 1
+frame.BorderSizePixel = 0
+frame.ClipsDescendants = true
+frame.Parent = gui
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 14)
+corner.Parent = frame
+
+-- Плавное появление основного окна
+tweenService:Create(frame, tweenInfo, {BackgroundTransparency = 0.1}):Play()
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -50, 0, 40)
+title.Position = UDim2.new(0, 0, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "УПРАВЛЕНИЕ СКОРОСТЬЮ"
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Font = Enum.Font.GothamBold
+title.TextSize = 18
+title.TextTransparency = 0
+title.Parent = frame
+
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.new(0, 30, 0, 30)
+closeButton.Position = UDim2.new(1, -35, 0, 5)
+closeButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeButton.Text = "×"
+closeButton.Font = Enum.Font.GothamBold
+closeButton.TextSize = 20
+closeButton.TextTransparency = 0
+closeButton.Parent = frame
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(1, 0)
+closeCorner.Parent = closeButton
+
+closeButton.MouseEnter:Connect(function()
+    tweenService:Create(closeButton, hoverInfo, {BackgroundColor3 = Color3.fromRGB(60, 60, 60)}):Play()
+end)
+
+closeButton.MouseLeave:Connect(function()
+    tweenService:Create(closeButton, hoverInfo, {BackgroundColor3 = Color3.fromRGB(40, 40, 40)}):Play()
+end)
+
+closeButton.MouseButton1Click:Connect(function()
+    tweenService:Create(frame, tweenInfo, {BackgroundTransparency = 1}):Play()
+    wait(0.3)
+    gui:Destroy()
+end)
+
+local methodButton = Instance.new("TextButton")
+methodButton.Size = UDim2.new(0.8, 0, 0, 40)
+methodButton.Position = UDim2.new(0.1, 0, 0.2, 0)
+methodButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+methodButton.Text = "Выбери метод"
+methodButton.TextColor3 = Color3.fromRGB(200, 200, 255)
+methodButton.Font = Enum.Font.Gotham
+methodButton.TextSize = 14
+methodButton.Parent = frame
+
+local methodCorner = Instance.new("UICorner")
+methodCorner.CornerRadius = UDim.new(0, 8)
+methodCorner.Parent = methodButton
+
+methodButton.MouseEnter:Connect(function()
+    tweenService:Create(methodButton, hoverInfo, {BackgroundColor3 = Color3.fromRGB(70, 70, 70)}):Play()
+end)
+
+methodButton.MouseLeave:Connect(function()
+    tweenService:Create(methodButton, hoverInfo, {BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play()
+end)
+
+methodButton.MouseButton1Click:Connect(showMethodSelection)
+
+local toggle = Instance.new("TextButton")
+toggle.Size = UDim2.new(0.8, 0, 0, 40)
+toggle.Position = UDim2.new(0.1, 0, 0.45, 0)
+toggle.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+toggle.Text = "ВКЛЮЧЕНО"
+toggle.TextColor3 = Color3.fromRGB(150, 255, 150)
+toggle.Font = Enum.Font.GothamBold
+toggle.TextSize = 16
+toggle.Parent = frame
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 8)
+toggleCorner.Parent = toggle
+
+toggle.MouseEnter:Connect(function()
+    tweenService:Create(toggle, hoverInfo, {BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play()
+end)
+
+toggle.MouseLeave:Connect(function()
+    tweenService:Create(toggle, hoverInfo, {BackgroundColor3 = Color3.fromRGB(40, 40, 40)}):Play()
+end)
+
+toggle.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    if enabled then
+        toggle.Text = "ВКЛЮЧЕНО"
+        tweenService:Create(toggle, tweenInfo, {TextColor3 = Color3.fromRGB(150, 255, 150)}):Play()
+    else
+        toggle.Text = "ВЫКЛЮЧЕНО"
+        tweenService:Create(toggle, tweenInfo, {TextColor3 = Color3.fromRGB(255, 150, 150)}):Play()
+    end
+end)
+
+local sliderContainer = Instance.new("Frame")
+sliderContainer.Size = UDim2.new(0.8, 0, 0, 60)
+sliderContainer.Position = UDim2.new(0.1, 0, 0.75, 0)
+sliderContainer.BackgroundTransparency = 1
+sliderContainer.Parent = frame
+
+local slider = Instance.new("Frame")
+slider.Size = UDim2.new(1, 0, 0, 10)
+slider.Position = UDim2.new(0, 0, 0.5, 0)
+slider.AnchorPoint = Vector2.new(0, 0.5)
+slider.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+slider.Parent = sliderContainer
+
+local sliderCorner = Instance.new("UICorner")
+sliderCorner.CornerRadius = UDim.new(1, 0)
+sliderCorner.Parent = slider
+
+local sliderFill = Instance.new("Frame")
+sliderFill.Size = UDim2.new(0.5, 0, 1, 0)
+sliderFill.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
+sliderFill.Parent = slider
+
+local fillCorner = Instance.new("UICorner")
+fillCorner.CornerRadius = UDim.new(1, 0)
+fillCorner.Parent = sliderFill
+
+local sliderText = Instance.new("TextLabel")
+sliderText.Size = UDim2.new(1, 0, 0, 25)
+sliderText.Position = UDim2.new(0, 0, 0, 0)
+sliderText.BackgroundTransparency = 1
+sliderText.Text = "СКОРОСТЬ: 1.0x"
+sliderText.TextColor3 = Color3.fromRGB(255, 255, 255)
+sliderText.Font = Enum.Font.Gotham
+sliderText.TextSize = 14
+sliderText.Parent = sliderContainer
+
+local function updateSlider(value)
+    local x = math.clamp(value, 0, 1)
+    speedMultiplier = 1 + x * (maxSpeedMultiplier - 1)
+    sliderFill.Size = UDim2.new(x, 0, 1, 0)
+    sliderText.Text = string.format("СКОРОСТЬ: %.1fx", speedMultiplier)
+end
+
+local dragging = false
+local dragStart, frameStart
+
+title.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        frameStart = frame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+title.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement and dragging then
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + delta.X, frameStart.Y.Scale, frameStart.Y.Offset + delta.Y)
+    end
+end)
+
+local draggingSlider = false
+
+slider.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingSlider = true
+        local x = (input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X
+        updateSlider(x)
+    end
+end)
+
+game:GetService("UserInputService").InputChanged:Connect(function(input)
+    if draggingSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local x = (input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X
+        updateSlider(x)
+    end
+end)
+
+game:GetService("UserInputService").InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingSlider = false
+    end
+end)
+
+game:GetService("RunService").Heartbeat:Connect(applySpeedBoost)
